@@ -1,9 +1,9 @@
 .ytcm-marker {
   position: absolute;
   top: 0;
-  width: 3px;
+  width: 6px;
   height: 100%;
-  background-color: #ff4040;
+  background-color: #ff9500;
   pointer-events: auto;
   z-index: 1000; /* プレイヤーUIより前面に */
 }
