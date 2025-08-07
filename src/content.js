@@ -90,6 +90,14 @@
     marker.className = 'ytcm-marker';
     marker.style.left = `${percent}%`;
     marker.setAttribute('data-tooltip', tooltipText);
+    marker.style.cursor = 'pointer';
+
+    // クリックでシーク
+    marker.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const vid = document.querySelector('video');
+      if (vid) vid.currentTime = seconds;
+    });
 
     // ツールチップ表示用イベント
     marker.addEventListener('mouseenter', () => {
