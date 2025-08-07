@@ -37,6 +37,22 @@
   }
 
   /**
+   * 指定した秒位置が既にバッファされているか
+   * @param {HTMLVideoElement} video
+   * @param {number} time
+   * @returns {boolean}
+   */
+  function isTimeBuffered(video, time) {
+    if (!video || !video.buffered) return false;
+    for (let i = 0; i < video.buffered.length; i++) {
+      if (video.buffered.start(i) <= time && time <= video.buffered.end(i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * シークバーにマーカーを描画
    * @param {number} seconds
    * @param {string} tooltipText
@@ -95,13 +111,19 @@
     // クリックでシーク
     marker.addEventListener('click', (e) => {
       e.stopPropagation();
-      const playerObj = document.getElementById('movie_player');
-      if (playerObj && typeof playerObj.seekTo === 'function') {
-        playerObj.seekTo(seconds, true);
-      } else {
-        const vid = document.querySelector('video');
-        if (vid) vid.currentTime = seconds;
+      const vid = document.querySelector('video');
+      if (!vid) return;
+      const target = seconds;
+      const buffered = isTimeBuffered(vid, target);
+      // シーク
+      if (buffered) {
+        vid.currentTime = target;
+        log('currentTime set', { target, buffered });
       }
+      // if (!buffered) {
+      //   vid.pause();
+      //   vid.addEventListener('canplay', () => vid.play(), { once: true });
+      // }
     });
 
     // ツールチップ表示用イベント
