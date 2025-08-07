@@ -2,7 +2,7 @@
   const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
   console.log('[YT-CM] content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
-  const PROGRESS_BAR_SELECTOR = '.ytp-progress-bar';
+  const CUSTOM_BAR_ID = 'ytcm-bar';
   const COMMENT_TEXT_SELECTOR = '#content-text';
 
   // 00:12   1:23   1:23:45 などにマッチ
@@ -61,6 +61,22 @@
     }
   }
 
+  function getOrCreateCustomBar() {
+    let bar = document.getElementById(CUSTOM_BAR_ID);
+    if (bar) return bar;
+    const player = document.querySelector('#player') || document.querySelector('#movie_player') || document.querySelector('ytd-watch-flexy');
+    if (!player) return null;
+    bar = document.createElement('div');
+    bar.id = CUSTOM_BAR_ID;
+    bar.style.position = 'relative';
+    bar.style.width = '100%';
+    bar.style.height = '4px';
+    bar.style.background = 'rgba(255,255,255,0.2)';
+    bar.style.marginTop = '6px';
+    player.parentElement?.insertBefore(bar, player.nextSibling);
+    return bar;
+  }
+
   function addMarker(seconds, tooltipText) {
     const video = document.querySelector('video');
     if (!video) return;
@@ -68,7 +84,7 @@
     const duration = video.duration;
     if (!duration || seconds > duration) return;
 
-    const bar = document.querySelector(PROGRESS_BAR_SELECTOR);
+    const bar = getOrCreateCustomBar();
     if (!bar) return;
 
     const percent = (seconds / duration) * 100;
