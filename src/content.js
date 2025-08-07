@@ -1,4 +1,9 @@
 (function () {
+  /** 現在の動画IDを取得 */
+  function getVideoId() {
+    const url = new URL(location.href);
+    return url.searchParams.get('v');
+  }
   const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
   console.log('[YT-CM] content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
@@ -9,7 +14,7 @@
   const timestampRegex = /(?:^|\s)(\d{1,2}:\d{2}(?::\d{2})?)(?:\s|$)/;
 
   // 同じコメントを二重に処理しないためのセット
-  const processedNodes = new WeakSet();
+  let processedNodes = new WeakSet();
 
   /**
    * "1:23:45" のような文字列を秒数に変換
@@ -37,6 +42,7 @@
    * @param {string} tooltipText
    */
   let activeTooltip = null;
+  let currentVideoId = getVideoId();
 
   function showTooltip(markerEl) {
     const text = markerEl.getAttribute('data-tooltip');
@@ -178,6 +184,26 @@
   }
 
   /** YouTube 視聴ページかどうか & コメント欄が存在するかを判定して初期化 */
+  function cleanupMarkers() {
+    hideTooltip();
+    document.querySelectorAll('.ytcm-marker').forEach((el) => el.remove());
+    // reset processedNodes so comments will be re-parsed on new video
+    processedNodes = new WeakSet();
+  }
+
+  function handleNavigation() {
+    const vid = getVideoId();
+    if (vid && vid !== currentVideoId) {
+      log('Video changed', { from: currentVideoId, to: vid });
+      currentVideoId = vid;
+      cleanupMarkers();
+      // コメント欄は SPA 遷移後に再構築されるため、少し遅延してスキャン
+      setTimeout(scanExistingComments, 1000);
+    }
+  }
+
+  window.addEventListener('yt-navigate-finish', handleNavigation);
+
   function init() {
     log('YT-CM init');
     if (!location.href.includes('youtube.com/watch')) return;
