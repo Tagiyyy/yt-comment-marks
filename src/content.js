@@ -107,6 +107,16 @@
     });
     marker.addEventListener('mouseleave', hideTooltip);
 
+    marker.style.cursor = 'pointer';
+    marker.dataset.time = String(seconds);
+    marker.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const vid = document.querySelector('video');
+      if (vid) {
+        vid.currentTime = seconds;
+      }
+    });
+
     bar.appendChild(marker);
     log('Marker added', { seconds, percent: percent.toFixed(2), text: tooltipText });
   }
