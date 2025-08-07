@@ -120,17 +120,8 @@
         vid.currentTime = target;
         log('currentTime set', { target, buffered });
       }
-      // if (!buffered) {
-      //   vid.pause();
-      //   vid.addEventListener('canplay', () => vid.play(), { once: true });
-      // }
     });
 
-    // ツールチップ表示用イベント
-    marker.addEventListener('mouseenter', () => {
-      showTooltip(marker);
-    });
-    marker.addEventListener('mouseleave', hideTooltip);
 
     bar.appendChild(marker);
     log('Marker added', { seconds, percent: percent.toFixed(2), text: tooltipText });
@@ -220,7 +211,6 @@
 
   /** YouTube 視聴ページかどうか & コメント欄が存在するかを判定して初期化 */
   function cleanupMarkers() {
-    hideTooltip();
     document.querySelectorAll('.ytcm-marker').forEach((el) => el.remove());
     // reset processedNodes so comments will be re-parsed on new video
     processedNodes = new WeakSet();
