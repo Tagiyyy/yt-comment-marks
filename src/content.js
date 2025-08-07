@@ -95,8 +95,13 @@
     // クリックでシーク
     marker.addEventListener('click', (e) => {
       e.stopPropagation();
-      const vid = document.querySelector('video');
-      if (vid) vid.currentTime = seconds;
+      const playerObj = document.getElementById('movie_player');
+      if (playerObj && typeof playerObj.seekTo === 'function') {
+        playerObj.seekTo(seconds, true);
+      } else {
+        const vid = document.querySelector('video');
+        if (vid) vid.currentTime = seconds;
+      }
     });
 
     // ツールチップ表示用イベント
