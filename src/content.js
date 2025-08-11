@@ -83,7 +83,7 @@
     }
   }
 
-  function addMarker(seconds, tooltipText) {
+  function addMarker(seconds, tooltipText, linkEl) {
     const video = document.querySelector('video');
     if (!video) return;
 
@@ -111,14 +111,25 @@
     // クリックでシーク
     marker.addEventListener('click', (e) => {
       e.stopPropagation();
+      // 元の <a> に合成クリックを送る（YouTube のハンドラを発火させる）
+      if (linkEl) {
+        try {
+          const ev = new MouseEvent('click', { bubbles: true, cancelable: true, view: window, button: 0 });
+          linkEl.dispatchEvent(ev);
+          return;
+        } catch (err) {
+          // フォールバックに進む
+        }
+      }
+
+      // フォールバック: 直接シーク
       const vid = document.querySelector('video');
       if (!vid) return;
       const target = seconds;
       const buffered = isTimeBuffered(vid, target);
-      // シーク
       if (buffered) {
         vid.currentTime = target;
-        log('currentTime set', { target, buffered });
+        log('currentTime set (fallback)', { target, buffered });
       }
     });
 
@@ -138,15 +149,54 @@
     const text = node.innerText;
     if (!text) return;
 
-    const match = text.match(timestampRegex);
-    if (!match) return;
+    // コメント内のタイムスタンプリンク(<a>)を検出
+    const anchors = Array.from(node.querySelectorAll('a'));
+    let tsLink = null;
+    for (const a of anchors) {
+      const label = a.textContent?.trim() || '';
+      const href = a.getAttribute('href') || '';
+      const textMatch = label.match(timestampRegex);
+      const hasTParam = /[?&#]t=|[?&#]start=/.test(href);
+      if (textMatch || hasTParam) {
+        tsLink = a;
+        break;
+      }
+    }
+    if (!tsLink) return; // タイムスタンプリンクが無い場合はスキップ
 
-    const tsString = match[1];
-    const seconds = parseTimestamp(tsString);
-    log('Timestamp found', { tsString, seconds, comment: text.trim().slice(0, 50) });
+    // 秒数の取得: テキスト優先、無ければ URL の t/start パラメータ
+    let seconds = null;
+    const textMatch = (tsLink.textContent || '').trim().match(timestampRegex);
+    if (textMatch) {
+      seconds = parseTimestamp(textMatch[1]);
+    }
+    if (seconds == null) {
+      const href = tsLink.getAttribute('href') || '';
+      try {
+        const url = new URL(href, location.href);
+        const tParam = url.searchParams.get('t') || url.searchParams.get('start');
+        if (tParam) {
+          const parsed = (function parseYouTubeTimeParam(v) {
+            // 例: 1h2m3s, 90s, 123
+            const match = String(v).match(/^(?:([0-9]+)h)?(?:([0-9]+)m)?(?:([0-9]+)s)?$|^([0-9]+)$/);
+            if (!match) return null;
+            if (match[4]) return parseInt(match[4], 10);
+            const h = parseInt(match[1] || '0', 10);
+            const m = parseInt(match[2] || '0', 10);
+            const s = parseInt(match[3] || '0', 10);
+            return h * 3600 + m * 60 + s;
+          })(tParam);
+          if (Number.isFinite(parsed)) seconds = parsed;
+        }
+      } catch (_) {
+        // ignore URL parse errors
+      }
+    }
+
     if (seconds == null) return;
 
-    addMarker(seconds, text.trim());
+    log('Timestamp found via link', { seconds, comment: text.trim().slice(0, 50) });
+    addMarker(seconds, text.trim(), tsLink);
   }
 
   /** 既に表示されているコメントを一括スキャン */
