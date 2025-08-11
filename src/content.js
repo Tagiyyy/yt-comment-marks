@@ -139,6 +139,30 @@
   }
 
   /**
+   * コメントノード内で、あるアンカーの直後から次のアンカー直前までのテキストを抜き出す
+   * @param {HTMLElement} container コメント全体のコンテナ
+   * @param {HTMLElement} startEl 範囲開始となるアンカー
+   * @param {HTMLElement|null} endEl 次のタイムスタンプアンカー（無ければコメント末尾）
+   * @returns {string}
+   */
+  function extractTextBetween(container, startEl, endEl) {
+    try {
+      const range = document.createRange();
+      range.setStartAfter(startEl);
+      if (endEl) {
+        range.setEndBefore(endEl);
+      } else {
+        // container の末尾まで
+        range.setEnd(container, container.childNodes.length);
+      }
+      return range.toString();
+    } catch (_) {
+      // 失敗時はコンテナ全文を返す
+      return container.innerText || '';
+    }
+  }
+
+  /**
    * コメントノードを処理して、タイムスタンプが含まれていればマーカーを追加
    * @param {HTMLElement} node
    */
@@ -149,54 +173,59 @@
     const text = node.innerText;
     if (!text) return;
 
-    // コメント内のタイムスタンプリンク(<a>)を検出
+    // コメント内のタイムスタンプリンク(<a>)をすべて検出
     const anchors = Array.from(node.querySelectorAll('a'));
-    let tsLink = null;
+    const timeAnchors = [];
     for (const a of anchors) {
       const label = a.textContent?.trim() || '';
       const href = a.getAttribute('href') || '';
       const textMatch = label.match(timestampRegex);
       const hasTParam = /[?&#]t=|[?&#]start=/.test(href);
-      if (textMatch || hasTParam) {
-        tsLink = a;
-        break;
-      }
-    }
-    if (!tsLink) return; // タイムスタンプリンクが無い場合はスキップ
+      if (!(textMatch || hasTParam)) continue;
 
-    // 秒数の取得: テキスト優先、無ければ URL の t/start パラメータ
-    let seconds = null;
-    const textMatch = (tsLink.textContent || '').trim().match(timestampRegex);
-    if (textMatch) {
-      seconds = parseTimestamp(textMatch[1]);
-    }
-    if (seconds == null) {
-      const href = tsLink.getAttribute('href') || '';
-      try {
-        const url = new URL(href, location.href);
-        const tParam = url.searchParams.get('t') || url.searchParams.get('start');
-        if (tParam) {
-          const parsed = (function parseYouTubeTimeParam(v) {
-            // 例: 1h2m3s, 90s, 123
-            const match = String(v).match(/^(?:([0-9]+)h)?(?:([0-9]+)m)?(?:([0-9]+)s)?$|^([0-9]+)$/);
-            if (!match) return null;
-            if (match[4]) return parseInt(match[4], 10);
-            const h = parseInt(match[1] || '0', 10);
-            const m = parseInt(match[2] || '0', 10);
-            const s = parseInt(match[3] || '0', 10);
-            return h * 3600 + m * 60 + s;
-          })(tParam);
-          if (Number.isFinite(parsed)) seconds = parsed;
+      // 秒数の取得: テキスト優先、無ければ URL の t/start パラメータ
+      let seconds = null;
+      if (textMatch) {
+        seconds = parseTimestamp(textMatch[1]);
+      }
+      if (seconds == null) {
+        try {
+          const url = new URL(href, location.href);
+          const tParam = url.searchParams.get('t') || url.searchParams.get('start');
+          if (tParam) {
+            const parsed = (function parseYouTubeTimeParam(v) {
+              // 例: 1h2m3s, 90s, 123
+              const match = String(v).match(/^(?:([0-9]+)h)?(?:([0-9]+)m)?(?:([0-9]+)s)?$|^([0-9]+)$/);
+              if (!match) return null;
+              if (match[4]) return parseInt(match[4], 10);
+              const h = parseInt(match[1] || '0', 10);
+              const m = parseInt(match[2] || '0', 10);
+              const s = parseInt(match[3] || '0', 10);
+              return h * 3600 + m * 60 + s;
+            })(tParam);
+            if (Number.isFinite(parsed)) seconds = parsed;
+          }
+        } catch (_) {
+          // ignore URL parse errors
         }
-      } catch (_) {
-        // ignore URL parse errors
+      }
+
+      if (seconds != null) {
+        timeAnchors.push({ anchor: a, seconds });
       }
     }
 
-    if (seconds == null) return;
+    if (timeAnchors.length === 0) return; // タイムスタンプが無い場合はスキップ
 
-    log('Timestamp found via link', { seconds, comment: text.trim().slice(0, 50) });
-    addMarker(seconds, text.trim(), tsLink);
+    // 各タイムスタンプごとに、次のタイムスタンプ直前までの文字列をツールチップにする
+    for (let i = 0; i < timeAnchors.length; i++) {
+      const current = timeAnchors[i];
+      const next = timeAnchors[i + 1]?.anchor || null;
+      const snippet = extractTextBetween(node, current.anchor, next).trim();
+      const tooltipText = snippet || text.trim();
+      log('Timestamp found via link', { seconds: current.seconds, comment: tooltipText.slice(0, 50) });
+      addMarker(current.seconds, tooltipText, current.anchor);
+    }
   }
 
   /** 既に表示されているコメントを一括スキャン */
