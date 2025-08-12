@@ -124,7 +124,11 @@
   function extractTextBetween(container, startEl, endEl) {
     try {
       const range = document.createRange();
-      range.setStartAfter(startEl);
+      if (startEl) {
+        range.setStartAfter(startEl);
+      } else {
+        range.setStart(container, 0);
+      }
       if (endEl) {
         range.setEndBefore(endEl);
       } else {
@@ -136,6 +140,109 @@
       // 失敗時はコンテナ全文を返す
       return container.innerText || '';
     }
+  }
+
+  // 行単位でアンカーに最も近い行を取得
+  function nearestLine(snippet, side) {
+    if (!snippet) return '';
+    const lines = snippet
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return '';
+    return side === 'before' ? lines[lines.length - 1] : lines[0];
+  }
+
+  // アンカーと同じ行にテキストがあるかを判定
+  function hasSameLineTextBefore(rawBefore) {
+    if (!rawBefore) return false;
+    const segment = rawBefore.split(/\r?\n/).pop() || '';
+    return segment.trim().length > 0;
+  }
+
+  function hasSameLineTextAfter(rawAfter) {
+    if (!rawAfter) return false;
+    const segment = rawAfter.split(/\r?\n/)[0] || '';
+    return segment.trim().length > 0;
+  }
+
+  // before/after から採用するテキストを選択（"同じ行" を最優先）
+  function pickSnippet(beforeLine, afterLine, sameBefore, sameAfter) {
+    const beforePreview = (beforeLine || '').slice(0, 80);
+    const afterPreview = (afterLine || '').slice(0, 80);
+
+    // まず "同じ行" 判定で決定
+    if (sameAfter && !sameBefore) {
+      log('pickSnippet: choose after (same line)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: (beforeLine || '').length,
+        afterLen: (afterLine || '').length,
+        beforePreview,
+        afterPreview,
+      });
+      return afterLine;
+    }
+    if (sameBefore && !sameAfter) {
+      log('pickSnippet: choose before (same line)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: (beforeLine || '').length,
+        afterLen: (afterLine || '').length,
+        beforePreview,
+        afterPreview,
+      });
+      return beforeLine;
+    }
+    if (sameBefore && sameAfter) {
+      log('pickSnippet: choose after (both same line)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: (beforeLine || '').length,
+        afterLen: (afterLine || '').length,
+        beforePreview,
+        afterPreview,
+      });
+      return afterLine; // 同行が両方ある場合は after を優先
+    }
+
+    // 同じ行に該当が無い場合のフォールバック
+    if (afterLine && !beforeLine) {
+      log('pickSnippet: choose after (fallback, before empty)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: 0,
+        afterLen: afterLine.length,
+        beforePreview,
+        afterPreview,
+      });
+      return afterLine;
+    }
+    if (beforeLine && !afterLine) {
+      log('pickSnippet: choose before (fallback, after empty)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: beforeLine.length,
+        afterLen: 0,
+        beforePreview,
+        afterPreview,
+      });
+      return beforeLine;
+    }
+    if (!beforeLine && !afterLine) {
+      log('pickSnippet: choose empty (fallback, both empty)', { sameBefore, sameAfter });
+      return '';
+    }
+
+    log('pickSnippet: choose after (fallback, both present)', {
+      sameBefore,
+      sameAfter,
+      beforeLen: beforeLine.length,
+      afterLen: afterLine.length,
+      beforePreview,
+      afterPreview,
+    });
+    return afterLine;
   }
 
   /**
@@ -193,12 +300,24 @@
 
     if (timeAnchors.length === 0) return; // タイムスタンプが無い場合はスキップ
 
-    // 各タイムスタンプごとに、次のタイムスタンプ直前までの文字列をツールチップにする
+    // 各タイムスタンプごとに、前後いずれか“近い行”をツールチップに採用
     for (let i = 0; i < timeAnchors.length; i++) {
+      const prev = timeAnchors[i - 1]?.anchor || null;
       const current = timeAnchors[i];
       const next = timeAnchors[i + 1]?.anchor || null;
-      const snippet = extractTextBetween(node, current.anchor, next).trim();
-      const tooltipText = snippet || text.trim();
+
+      const beforeRaw = extractTextBetween(node, prev, current.anchor);
+      const afterRaw = extractTextBetween(node, current.anchor, next);
+
+      const beforeLine = nearestLine(beforeRaw, 'before');
+      const afterLine = nearestLine(afterRaw, 'after');
+
+      const sameBefore = hasSameLineTextBefore(beforeRaw);
+      const sameAfter = hasSameLineTextAfter(afterRaw);
+
+      const chosen = pickSnippet(beforeLine, afterLine, sameBefore, sameAfter);
+
+      const tooltipText = chosen || text.trim();
       log('Timestamp found via link', { seconds: current.seconds, comment: tooltipText.slice(0, 50) });
       addMarker(current.seconds, tooltipText, current.anchor);
     }
