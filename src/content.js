@@ -57,7 +57,6 @@
    * @param {number} seconds
    * @param {string} tooltipText
    */
-  let activeTooltip = null;
   let currentVideoId = getVideoId();
 
   function addMarker(seconds, tooltipText, linkEl) {
