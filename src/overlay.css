@@ -1,9 +1,14 @@
 .ytcm-marker {
   position: absolute;
-  top: 0;
-  width: 6px;
-  height: 100%;
-  background-color: #ff9500;
+  top: -300%;
+  width: 8px;
+  height: 400%;
+  /* バーは下側の25%に相当。 */
+  background: linear-gradient(
+    to bottom,
+    transparent 0 75%,
+    #ff9500 75% 100%
+  );
   pointer-events: auto;
   z-index: 1000; /* プレイヤーUIより前面に */
 }
