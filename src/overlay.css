@@ -12,16 +12,3 @@
   pointer-events: auto;
   z-index: 1000; /* プレイヤーUIより前面に */
 }
-
-.ytcm-tooltip {
-  position: fixed;
-  background: rgba(0, 0, 0, 0.8);
-  color: #ffffff;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: pre-line;
-  pointer-events: none;
-  z-index: 10000;
-  transform: translate(-50%, -100%);
-}
