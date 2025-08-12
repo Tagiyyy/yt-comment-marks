@@ -60,29 +60,6 @@
   let activeTooltip = null;
   let currentVideoId = getVideoId();
 
-  function showTooltip(markerEl) {
-    const text = markerEl.getAttribute('data-tooltip');
-    if (!text) return;
-    hideTooltip();
-    const rect = markerEl.getBoundingClientRect();
-    const tip = document.createElement('div');
-    tip.className = 'ytcm-tooltip';
-    tip.textContent = text;
-    document.body.appendChild(tip);
-    // 位置計算
-    const tipRect = tip.getBoundingClientRect();
-    tip.style.left = `${rect.left + rect.width / 2}px`;
-    tip.style.top = `${rect.top - 4}px`;
-    activeTooltip = tip;
-  }
-
-  function hideTooltip() {
-    if (activeTooltip) {
-      activeTooltip.remove();
-      activeTooltip = null;
-    }
-  }
-
   function addMarker(seconds, tooltipText, linkEl) {
     const video = document.querySelector('video');
     if (!video) return;
