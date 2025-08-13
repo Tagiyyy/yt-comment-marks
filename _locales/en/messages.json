@@ -1,7 +1,7 @@
 {
-  "extName": { "message": "YouTube Comment Marks" },
+  "extName": { "message": "YouTube Highlight Markers" },
   "extDesc": { "message": "Show comment timestamps as markers on the YouTube seek bar." },
-  "actionTitle": { "message": "YouTube Comment Marks" }
+  "actionTitle": { "message": "YouTube Highlight Markers" }
 }
 
 
