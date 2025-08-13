@@ -4,8 +4,10 @@
     const url = new URL(location.href);
     return url.searchParams.get('v');
   }
-  const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
-  console.log('[YT-CM] content script injected');
+  // const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
+  const log = () => {};
+  
+  log('content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
   const PROGRESS_BAR_SELECTOR = '.ytp-progress-bar';
   const COMMENT_TEXT_SELECTOR = '#content-text';

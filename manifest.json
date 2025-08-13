@@ -3,12 +3,11 @@
   "name": "YouTube Comment Marks",
   "description": "Show comment timestamps as markers on the YouTube seek bar.",
   "version": "0.1.0",
-  "permissions": ["activeTab", "storage"],
   "host_permissions": ["https://www.youtube.com/*"],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/watch*"],
-      "js": ["src/logger.js", "src/content.js"],
+      "js": ["src/content.js"],
       "css": ["src/overlay.css"],
       "run_at": "document_idle"
     }
