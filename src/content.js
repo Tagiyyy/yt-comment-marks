@@ -4,8 +4,7 @@
     const url = new URL(location.href);
     return url.searchParams.get('v');
   }
-  // const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
-  const log = () => {};
+  const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
   
   log('content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
@@ -17,6 +16,7 @@
 
   // 同じコメントを二重に処理しないためのセット
   let processedNodes = new WeakSet();
+  let commentObserver = null;
 
   /**
    * "1:23:45" のような文字列を秒数に変換
@@ -356,33 +356,54 @@
 
   /** コメント欄の後続読み込みに対応するための監視 */
   async function observeCommentSection() {
+    // 既存の監視を解除してから張り直す
+    commentObserver?.disconnect();
+    commentObserver = null;
+
     let container;
     try {
-      container = await waitForElement(COMMENT_CONTAINER_SELECTOR, 15000);
+      container = await waitForElement(COMMENT_CONTAINER_SELECTOR, 30000);
       log('Comment container found');
     } catch (e) {
-      log('Comment container not found', e);
+      log('Comment container not found, retrying...', e?.message || e);
+      setTimeout(observeCommentSection, 2000);
       return;
     }
 
-    // 既存コメントをまずスキャン
+    // まず現状をスキャン
     scanExistingComments();
 
-    const observer = new MutationObserver((mutations) => {
+    commentObserver = new MutationObserver((mutations) => {
       for (const m of mutations) {
         m.addedNodes.forEach((n) => {
           if (n.nodeType !== 1) return;
-          // 追加ノード自身がコメントテキスト
-          if (n.matches && n.matches(COMMENT_TEXT_SELECTOR)) {
-            processCommentNode(n);
-          }
-          // 子孫にコメントテキストがある場合
+          if (n.matches?.(COMMENT_TEXT_SELECTOR)) processCommentNode(n);
           n.querySelectorAll?.(COMMENT_TEXT_SELECTOR).forEach((el) => processCommentNode(el));
         });
       }
     });
 
-    observer.observe(container, { childList: true, subtree: true });
+    commentObserver.observe(container, { childList: true, subtree: true });
+  }
+
+  function waitVideoReadyThenScan() {
+    const tryOnce = () => {
+      const video = document.querySelector('video');
+      if (video && (video.readyState >= 1 || Number.isFinite(video.duration))) {
+        scanExistingComments();
+      } else if (video) {
+        video.addEventListener('loadedmetadata', scanExistingComments, { once: true });
+      } else {
+        requestAnimationFrame(tryOnce);
+      }
+    };
+    tryOnce();
+  }
+
+  function boot() {
+    // URL が watch でなくても監視の張り直しは許可（実際にヒットしなければ何も起きない）
+    observeCommentSection();
+    waitVideoReadyThenScan();
   }
 
   /** YouTube 視聴ページかどうか & コメント欄が存在するかを判定して初期化 */
@@ -398,8 +419,7 @@
       log('Video changed', { from: currentVideoId, to: vid });
       currentVideoId = vid;
       cleanupMarkers();
-      // コメント欄は SPA 遷移後に再構築されるため、少し遅延してスキャン
-      setTimeout(scanExistingComments, 1000);
+      boot();
     }
   }
 
@@ -407,17 +427,7 @@
 
   function init() {
     log('YT-CM init');
-    if (!location.href.includes('youtube.com/watch')) return;
-
-    // 動画のメタデータが読み込まれてから処理を開始
-    const video = document.querySelector('video');
-    if (video && video.readyState >= 1) {
-      scanExistingComments();
-    } else if (video) {
-      video.addEventListener('loadedmetadata', scanExistingComments, { once: true });
-    }
-
-    observeCommentSection();
+    boot();
   }
 
   if (document.readyState !== 'loading') {
