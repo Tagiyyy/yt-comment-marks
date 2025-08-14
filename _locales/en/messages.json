@@ -1,7 +1,7 @@
 {
-  "extName": { "message": "YouTube Highlight Markers" },
-  "extDesc": { "message": "Show comment timestamps as markers on the YouTube seek bar." },
-  "actionTitle": { "message": "YouTube Highlight Markers" }
+  "extName": { "message": "YouTube Comment Timestamp Markers" },
+  "extDesc": { "message": "Adds markers to the YouTube progress bar from timestamps found in comments." },
+  "actionTitle": { "message": "Enable comment markers" }
 }
 
 

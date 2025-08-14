@@ -1,7 +1,7 @@
 {
   "extName": { "message": "YouTube見どころマーカー" },
-  "extDesc": { "message": "コメント内のタイムスタンプを動画のシークバーにマーカー表示します。" },
-  "actionTitle": { "message": "YouTube見どころマーカー" }
+  "extDesc": { "message": "コメント欄のタイムスタンプを動画のシークバーにマーカーとして表示します。" },
+  "actionTitle": { "message": "コメントをシークバーに表示" }
 }
 
 
