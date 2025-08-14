@@ -1,30 +1,14 @@
 .ytcm-marker {
   position: absolute;
-  top: 0;
-  width: 3px;
-  height: 100%;
-  background-color: #ff4040;
+  top: -300%;
+  width: 8px;
+  height: 400%;
+  /* バーは下側の25%に相当。 */
+  background: linear-gradient(
+    to bottom,
+    transparent 0 75%,
+    #ff9500 75% 100%
+  );
   pointer-events: auto;
   z-index: 1000; /* プレイヤーUIより前面に */
-}
-
-.ytcm-bar {
-  position: relative;
-  width: 100%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  margin-top: 6px;
-}
-
-.ytcm-tooltip {
-  position: fixed;
-  background: rgba(0, 0, 0, 0.8);
-  color: #ffffff;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: pre-line;
-  pointer-events: none;
-  z-index: 10000;
-  transform: translate(-50%, -100%);
 }

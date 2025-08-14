@@ -1,6 +1,12 @@
 (function () {
+  /** 現在の動画IDを取得 */
+  function getVideoId() {
+    const url = new URL(location.href);
+    return url.searchParams.get('v');
+  }
   const log = (window.YTCM_LOG && window.YTCM_LOG.log) ? window.YTCM_LOG.log : (...a)=>console.log('[YT-CM]', ...a);
-  console.log('[YT-CM] content script injected');
+  
+  log('content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
   const CUSTOM_BAR_ID = 'ytcm-bar';
   const COMMENT_TEXT_SELECTOR = '#content-text';
@@ -9,7 +15,8 @@
   const timestampRegex = /(?:^|\s)(\d{1,2}:\d{2}(?::\d{2})?)(?:\s|$)/;
 
   // 同じコメントを二重に処理しないためのセット
-  const processedNodes = new WeakSet();
+  let processedNodes = new WeakSet();
+  let commentObserver = null;
 
   /**
    * "1:23:45" のような文字列を秒数に変換
@@ -32,52 +39,29 @@
   }
 
   /**
+   * 指定した秒位置が既にバッファされているか
+   * @param {HTMLVideoElement} video
+   * @param {number} time
+   * @returns {boolean}
+   */
+  function isTimeBuffered(video, time) {
+    if (!video || !video.buffered) return false;
+    for (let i = 0; i < video.buffered.length; i++) {
+      if (video.buffered.start(i) <= time && time <= video.buffered.end(i)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * シークバーにマーカーを描画
    * @param {number} seconds
    * @param {string} tooltipText
    */
-  let activeTooltip = null;
+  let currentVideoId = getVideoId();
 
-  function showTooltip(markerEl) {
-    const text = markerEl.getAttribute('data-tooltip');
-    if (!text) return;
-    hideTooltip();
-    const rect = markerEl.getBoundingClientRect();
-    const tip = document.createElement('div');
-    tip.className = 'ytcm-tooltip';
-    tip.textContent = text;
-    document.body.appendChild(tip);
-    // 位置計算
-    const tipRect = tip.getBoundingClientRect();
-    tip.style.left = `${rect.left + rect.width / 2}px`;
-    tip.style.top = `${rect.top - 4}px`;
-    activeTooltip = tip;
-  }
-
-  function hideTooltip() {
-    if (activeTooltip) {
-      activeTooltip.remove();
-      activeTooltip = null;
-    }
-  }
-
-  function getOrCreateCustomBar() {
-    let bar = document.getElementById(CUSTOM_BAR_ID);
-    if (bar) return bar;
-    const player = document.querySelector('#player') || document.querySelector('#movie_player') || document.querySelector('ytd-watch-flexy');
-    if (!player) return null;
-    bar = document.createElement('div');
-    bar.id = CUSTOM_BAR_ID;
-    bar.style.position = 'relative';
-    bar.style.width = '100%';
-    bar.style.height = '4px';
-    bar.style.background = 'rgba(255,255,255,0.2)';
-    bar.style.marginTop = '6px';
-    player.parentElement?.insertBefore(bar, player.nextSibling);
-    return bar;
-  }
-
-  function addMarker(seconds, tooltipText) {
+  function addMarker(seconds, tooltipText, linkEl) {
     const video = document.querySelector('video');
     if (!video) return;
 
@@ -100,12 +84,33 @@
     marker.className = 'ytcm-marker';
     marker.style.left = `${percent}%`;
     marker.setAttribute('data-tooltip', tooltipText);
+    marker.style.cursor = 'pointer';
 
-    // ツールチップ表示用イベント
-    marker.addEventListener('mouseenter', () => {
-      showTooltip(marker);
+    // クリックでシーク
+    marker.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // 元の <a> に合成クリックを送る（YouTube のハンドラを発火させる）
+      if (linkEl) {
+        try {
+          const ev = new MouseEvent('click', { bubbles: true, cancelable: true, view: window, button: 0 });
+          linkEl.dispatchEvent(ev);
+          return;
+        } catch (err) {
+          // フォールバックに進む
+        }
+      }
+
+      // フォールバック: 直接シーク
+      const vid = document.querySelector('video');
+      if (!vid) return;
+      const target = seconds;
+      const buffered = isTimeBuffered(vid, target);
+      if (buffered) {
+        vid.currentTime = target;
+        log('currentTime set (fallback)', { target, buffered });
+      }
     });
-    marker.addEventListener('mouseleave', hideTooltip);
+
 
     marker.style.cursor = 'pointer';
     marker.dataset.time = String(seconds);
@@ -122,6 +127,137 @@
   }
 
   /**
+   * コメントノード内で、あるアンカーの直後から次のアンカー直前までのテキストを抜き出す
+   * @param {HTMLElement} container コメント全体のコンテナ
+   * @param {HTMLElement} startEl 範囲開始となるアンカー
+   * @param {HTMLElement|null} endEl 次のタイムスタンプアンカー（無ければコメント末尾）
+   * @returns {string}
+   */
+  function extractTextBetween(container, startEl, endEl) {
+    try {
+      const range = document.createRange();
+      if (startEl) {
+        range.setStartAfter(startEl);
+      } else {
+        range.setStart(container, 0);
+      }
+      if (endEl) {
+        range.setEndBefore(endEl);
+      } else {
+        // container の末尾まで
+        range.setEnd(container, container.childNodes.length);
+      }
+      return range.toString();
+    } catch (_) {
+      // 失敗時はコンテナ全文を返す
+      return container.innerText || '';
+    }
+  }
+
+  // 行単位でアンカーに最も近い行を取得
+  function nearestLine(snippet, side) {
+    if (!snippet) return '';
+    const lines = snippet
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return '';
+    return side === 'before' ? lines[lines.length - 1] : lines[0];
+  }
+
+  // アンカーと同じ行にテキストがあるかを判定
+  function hasSameLineTextBefore(rawBefore) {
+    if (!rawBefore) return false;
+    const segment = rawBefore.split(/\r?\n/).pop() || '';
+    return segment.trim().length > 0;
+  }
+
+  function hasSameLineTextAfter(rawAfter) {
+    if (!rawAfter) return false;
+    const segment = rawAfter.split(/\r?\n/)[0] || '';
+    return segment.trim().length > 0;
+  }
+
+  // before/after から採用するテキストを選択（"同じ行" を最優先）
+  function pickSnippet(beforeLine, afterLine, sameBefore, sameAfter) {
+    const beforePreview = (beforeLine || '').slice(0, 80);
+    const afterPreview = (afterLine || '').slice(0, 80);
+
+    // まず "同じ行" 判定で決定
+    if (sameAfter && !sameBefore) {
+      log('pickSnippet: choose after (same line)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: (beforeLine || '').length,
+        afterLen: (afterLine || '').length,
+        beforePreview,
+        afterPreview,
+      });
+      return afterLine;
+    }
+    if (sameBefore && !sameAfter) {
+      log('pickSnippet: choose before (same line)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: (beforeLine || '').length,
+        afterLen: (afterLine || '').length,
+        beforePreview,
+        afterPreview,
+      });
+      return beforeLine;
+    }
+    if (sameBefore && sameAfter) {
+      log('pickSnippet: choose after (both same line)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: (beforeLine || '').length,
+        afterLen: (afterLine || '').length,
+        beforePreview,
+        afterPreview,
+      });
+      return afterLine; // 同行が両方ある場合は after を優先
+    }
+
+    // 同じ行に該当が無い場合のフォールバック
+    if (afterLine && !beforeLine) {
+      log('pickSnippet: choose after (fallback, before empty)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: 0,
+        afterLen: afterLine.length,
+        beforePreview,
+        afterPreview,
+      });
+      return afterLine;
+    }
+    if (beforeLine && !afterLine) {
+      log('pickSnippet: choose before (fallback, after empty)', {
+        sameBefore,
+        sameAfter,
+        beforeLen: beforeLine.length,
+        afterLen: 0,
+        beforePreview,
+        afterPreview,
+      });
+      return beforeLine;
+    }
+    if (!beforeLine && !afterLine) {
+      log('pickSnippet: choose empty (fallback, both empty)', { sameBefore, sameAfter });
+      return '';
+    }
+
+    log('pickSnippet: choose after (fallback, both present)', {
+      sameBefore,
+      sameAfter,
+      beforeLen: beforeLine.length,
+      afterLen: afterLine.length,
+      beforePreview,
+      afterPreview,
+    });
+    return afterLine;
+  }
+
+  /**
    * コメントノードを処理して、タイムスタンプが含まれていればマーカーを追加
    * @param {HTMLElement} node
    */
@@ -132,15 +268,71 @@
     const text = node.innerText;
     if (!text) return;
 
-    const match = text.match(timestampRegex);
-    if (!match) return;
+    // コメント内のタイムスタンプリンク(<a>)をすべて検出
+    const anchors = Array.from(node.querySelectorAll('a'));
+    const timeAnchors = [];
+    for (const a of anchors) {
+      const label = a.textContent?.trim() || '';
+      const href = a.getAttribute('href') || '';
+      const textMatch = label.match(timestampRegex);
+      const hasTParam = /[?&#]t=|[?&#]start=/.test(href);
+      if (!(textMatch || hasTParam)) continue;
 
-    const tsString = match[1];
-    const seconds = parseTimestamp(tsString);
-    log('Timestamp found', { tsString, seconds, comment: text.trim().slice(0, 50) });
-    if (seconds == null) return;
+      // 秒数の取得: テキスト優先、無ければ URL の t/start パラメータ
+      let seconds = null;
+      if (textMatch) {
+        seconds = parseTimestamp(textMatch[1]);
+      }
+      if (seconds == null) {
+        try {
+          const url = new URL(href, location.href);
+          const tParam = url.searchParams.get('t') || url.searchParams.get('start');
+          if (tParam) {
+            const parsed = (function parseYouTubeTimeParam(v) {
+              // 例: 1h2m3s, 90s, 123
+              const match = String(v).match(/^(?:([0-9]+)h)?(?:([0-9]+)m)?(?:([0-9]+)s)?$|^([0-9]+)$/);
+              if (!match) return null;
+              if (match[4]) return parseInt(match[4], 10);
+              const h = parseInt(match[1] || '0', 10);
+              const m = parseInt(match[2] || '0', 10);
+              const s = parseInt(match[3] || '0', 10);
+              return h * 3600 + m * 60 + s;
+            })(tParam);
+            if (Number.isFinite(parsed)) seconds = parsed;
+          }
+        } catch (_) {
+          // ignore URL parse errors
+        }
+      }
 
-    addMarker(seconds, text.trim());
+      if (seconds != null) {
+        timeAnchors.push({ anchor: a, seconds });
+      }
+    }
+
+    if (timeAnchors.length === 0) return; // タイムスタンプが無い場合はスキップ
+
+    // 各タイムスタンプごとに、前後いずれか“近い行”をツールチップに採用
+    for (let i = 0; i < timeAnchors.length; i++) {
+      const prev = timeAnchors[i - 1]?.anchor || null;
+      const current = timeAnchors[i];
+      const next = timeAnchors[i + 1]?.anchor || null;
+
+      const beforeRaw = extractTextBetween(node, prev, current.anchor);
+      const afterRaw = extractTextBetween(node, current.anchor, next);
+
+      const beforeLine = nearestLine(beforeRaw, 'before');
+      const afterLine = nearestLine(afterRaw, 'after');
+
+      const sameBefore = hasSameLineTextBefore(beforeRaw);
+      const sameAfter = hasSameLineTextAfter(afterRaw);
+
+      const chosen = pickSnippet(beforeLine, afterLine, sameBefore, sameAfter);
+
+      const tooltipText = chosen || text.trim();
+      log('Timestamp found via link', { seconds: current.seconds, comment: tooltipText.slice(0, 50) });
+      addMarker(current.seconds, tooltipText, current.anchor);
+    }
   }
 
   /** 既に表示されているコメントを一括スキャン */
@@ -174,49 +366,78 @@
 
   /** コメント欄の後続読み込みに対応するための監視 */
   async function observeCommentSection() {
+    // 既存の監視を解除してから張り直す
+    commentObserver?.disconnect();
+    commentObserver = null;
+
     let container;
     try {
-      container = await waitForElement(COMMENT_CONTAINER_SELECTOR, 15000);
+      container = await waitForElement(COMMENT_CONTAINER_SELECTOR, 30000);
       log('Comment container found');
     } catch (e) {
-      log('Comment container not found', e);
+      log('Comment container not found, retrying...', e?.message || e);
+      setTimeout(observeCommentSection, 2000);
       return;
     }
 
-    // 既存コメントをまずスキャン
+    // まず現状をスキャン
     scanExistingComments();
 
-    const observer = new MutationObserver((mutations) => {
+    commentObserver = new MutationObserver((mutations) => {
       for (const m of mutations) {
         m.addedNodes.forEach((n) => {
           if (n.nodeType !== 1) return;
-          // 追加ノード自身がコメントテキスト
-          if (n.matches && n.matches(COMMENT_TEXT_SELECTOR)) {
-            processCommentNode(n);
-          }
-          // 子孫にコメントテキストがある場合
+          if (n.matches?.(COMMENT_TEXT_SELECTOR)) processCommentNode(n);
           n.querySelectorAll?.(COMMENT_TEXT_SELECTOR).forEach((el) => processCommentNode(el));
         });
       }
     });
 
-    observer.observe(container, { childList: true, subtree: true });
+    commentObserver.observe(container, { childList: true, subtree: true });
+  }
+
+  function waitVideoReadyThenScan() {
+    const tryOnce = () => {
+      const video = document.querySelector('video');
+      if (video && (video.readyState >= 1 || Number.isFinite(video.duration))) {
+        scanExistingComments();
+      } else if (video) {
+        video.addEventListener('loadedmetadata', scanExistingComments, { once: true });
+      } else {
+        requestAnimationFrame(tryOnce);
+      }
+    };
+    tryOnce();
+  }
+
+  function boot() {
+    // URL が watch でなくても監視の張り直しは許可（実際にヒットしなければ何も起きない）
+    observeCommentSection();
+    waitVideoReadyThenScan();
   }
 
   /** YouTube 視聴ページかどうか & コメント欄が存在するかを判定して初期化 */
+  function cleanupMarkers() {
+    document.querySelectorAll('.ytcm-marker').forEach((el) => el.remove());
+    // reset processedNodes so comments will be re-parsed on new video
+    processedNodes = new WeakSet();
+  }
+
+  function handleNavigation() {
+    const vid = getVideoId();
+    if (vid && vid !== currentVideoId) {
+      log('Video changed', { from: currentVideoId, to: vid });
+      currentVideoId = vid;
+      cleanupMarkers();
+      boot();
+    }
+  }
+
+  window.addEventListener('yt-navigate-finish', handleNavigation);
+
   function init() {
     log('YT-CM init');
-    if (!location.href.includes('youtube.com/watch')) return;
-
-    // 動画のメタデータが読み込まれてから処理を開始
-    const video = document.querySelector('video');
-    if (video && video.readyState >= 1) {
-      scanExistingComments();
-    } else if (video) {
-      video.addEventListener('loadedmetadata', scanExistingComments, { once: true });
-    }
-
-    observeCommentSection();
+    boot();
   }
 
   if (document.readyState !== 'loading') {

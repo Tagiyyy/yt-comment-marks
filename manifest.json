@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Comment Marks",
-  "description": "Show comment timestamps as markers on the YouTube seek bar.",
+  "default_locale": "en",
+  "name": "__MSG_extName__",
+  "description": "__MSG_extDesc__",
   "version": "0.1.0",
-  "permissions": ["activeTab", "storage"],
   "host_permissions": ["https://www.youtube.com/*"],
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/watch*"],
-      "js": ["src/logger.js", "src/content.js"],
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["src/content.js"],
       "css": ["src/overlay.css"],
       "run_at": "document_idle"
     }
@@ -20,6 +20,6 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "YouTube Comment Marks"
+    "default_title": "__MSG_actionTitle__"
   }
 }
