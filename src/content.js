@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+   Copyright (c) 2025 @Tagiyyy
+*/
 (function () {
   /** 現在の動画IDを取得 */
   function getVideoId() {

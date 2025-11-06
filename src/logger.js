@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+   Copyright (c) 2025 @Tagiyyy
+*/
 (function(){
   const DEBUG_KEY = 'ytcm_debug';
   const DEFAULT_DEBUG = true;
