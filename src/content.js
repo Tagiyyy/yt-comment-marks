@@ -85,7 +85,7 @@
     const marker = document.createElement('div');
     marker.className = 'ytcm-marker';
     marker.style.left = `${percent}%`;
-    marker.setAttribute('data-tooltip', tooltipText);
+    marker.setAttribute('ytcm-data-tooltip', tooltipText);
     marker.style.cursor = 'pointer';
 
     // クリックでシーク
