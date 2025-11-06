@@ -11,7 +11,6 @@
   
   log('content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
-  const CUSTOM_BAR_ID = 'ytcm-bar';
   const COMMENT_TEXT_SELECTOR = '#content-text';
 
   // 00:12   1:23   1:23:45 などにマッチ
@@ -71,7 +70,7 @@
     const duration = video.duration;
     if (!duration || seconds > duration) return;
 
-    const bar = getOrCreateCustomBar();
+    const bar = document.querySelector('.ytp-progress-bar');
     if (!bar) return;
 
     const percent = (seconds / duration) * 100;
@@ -111,17 +110,6 @@
       if (buffered) {
         vid.currentTime = target;
         log('currentTime set (fallback)', { target, buffered });
-      }
-    });
-
-
-    marker.style.cursor = 'pointer';
-    marker.dataset.time = String(seconds);
-    marker.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const vid = document.querySelector('video');
-      if (vid) {
-        vid.currentTime = seconds;
       }
     });
 
