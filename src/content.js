@@ -85,8 +85,42 @@
     const marker = document.createElement('div');
     marker.className = 'ytcm-marker';
     marker.style.left = `${percent}%`;
-    marker.setAttribute('ytcm-data-tooltip', tooltipText);
     marker.style.cursor = 'pointer';
+    marker.tabIndex = 0;
+    marker.setAttribute('role', 'button');
+    marker.setAttribute('aria-label', tooltipText);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'ytcm-tooltip';
+    tooltip.textContent = tooltipText;
+    marker.appendChild(tooltip);
+
+    const adjustTooltipPosition = () => {
+      tooltip.style.removeProperty('--ytcm-shift');
+      const rect = tooltip.getBoundingClientRect();
+      if (!rect || !rect.width) return;
+      const margin = 12;
+      let shift = 0;
+      if (rect.left < margin) {
+        shift = margin - rect.left;
+      } else {
+        const overflowRight = rect.right - (window.innerWidth - margin);
+        if (overflowRight > 0) {
+          shift = -overflowRight;
+        }
+      }
+      tooltip.style.setProperty('--ytcm-shift', `${shift}px`);
+    };
+
+    const resetTooltipShift = () => {
+      tooltip.style.removeProperty('--ytcm-shift');
+    };
+
+    marker.addEventListener('mouseenter', adjustTooltipPosition);
+    marker.addEventListener('focus', adjustTooltipPosition);
+    marker.addEventListener('touchstart', adjustTooltipPosition, { passive: true });
+    marker.addEventListener('mouseleave', resetTooltipShift);
+    marker.addEventListener('blur', resetTooltipShift);
 
     // クリックでシーク
     marker.addEventListener('click', (e) => {
