@@ -100,16 +100,24 @@
       const rect = tooltip.getBoundingClientRect();
       if (!rect || !rect.width) return;
       const margin = 12;
+      const container =
+        marker.closest('.html5-video-player') ||
+        marker.closest('.ytp-chrome-bottom') ||
+        document.querySelector('.html5-video-player');
+      const containerRect = container?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      const minLeft = containerRect.left + margin;
+      const maxRight = containerRect.right - margin;
       let shift = 0;
-      if (rect.left < margin) {
-        shift = margin - rect.left;
-      } else {
-        const overflowRight = rect.right - (window.innerWidth - margin);
-        if (overflowRight > 0) {
-          shift = -overflowRight;
-        }
+      if (rect.left < minLeft) {
+        shift = minLeft - rect.left;
+      } else if (rect.right > maxRight) {
+        shift = maxRight - rect.right;
       }
-      tooltip.style.setProperty('--ytcm-shift', `${shift}px`);
+      if (shift !== 0) {
+        tooltip.style.setProperty('--ytcm-shift', `${shift}px`);
+      }
     };
 
     const resetTooltipShift = () => {
