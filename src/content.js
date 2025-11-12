@@ -11,7 +11,6 @@
   
   log('content script injected');
   const COMMENT_CONTAINER_SELECTOR = '#comments #contents';
-  const CUSTOM_BAR_ID = 'ytcm-bar';
   const COMMENT_TEXT_SELECTOR = '#content-text';
 
   // 00:12   1:23   1:23:45 などにマッチ
@@ -71,7 +70,7 @@
     const duration = video.duration;
     if (!duration || seconds > duration) return;
 
-    const bar = getOrCreateCustomBar();
+    const bar = document.querySelector('.ytp-progress-bar');
     if (!bar) return;
 
     const percent = (seconds / duration) * 100;
@@ -86,8 +85,50 @@
     const marker = document.createElement('div');
     marker.className = 'ytcm-marker';
     marker.style.left = `${percent}%`;
-    marker.setAttribute('data-tooltip', tooltipText);
     marker.style.cursor = 'pointer';
+    marker.tabIndex = 0;
+    marker.setAttribute('role', 'button');
+    marker.setAttribute('aria-label', tooltipText);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'ytcm-tooltip';
+    tooltip.textContent = tooltipText;
+    marker.appendChild(tooltip);
+
+    const adjustTooltipPosition = () => {
+      tooltip.style.removeProperty('--ytcm-shift');
+      const rect = tooltip.getBoundingClientRect();
+      if (!rect || !rect.width) return;
+      const margin = 12;
+      const container =
+        marker.closest('.html5-video-player') ||
+        marker.closest('.ytp-chrome-bottom') ||
+        document.querySelector('.html5-video-player');
+      const containerRect = container?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      const minLeft = containerRect.left + margin;
+      const maxRight = containerRect.right - margin;
+      let shift = 0;
+      if (rect.left < minLeft) {
+        shift = minLeft - rect.left;
+      } else if (rect.right > maxRight) {
+        shift = maxRight - rect.right;
+      }
+      if (shift !== 0) {
+        tooltip.style.setProperty('--ytcm-shift', `${shift}px`);
+      }
+    };
+
+    const resetTooltipShift = () => {
+      tooltip.style.removeProperty('--ytcm-shift');
+    };
+
+    marker.addEventListener('mouseenter', adjustTooltipPosition);
+    marker.addEventListener('focus', adjustTooltipPosition);
+    marker.addEventListener('touchstart', adjustTooltipPosition, { passive: true });
+    marker.addEventListener('mouseleave', resetTooltipShift);
+    marker.addEventListener('blur', resetTooltipShift);
 
     // クリックでシーク
     marker.addEventListener('click', (e) => {
@@ -111,17 +152,6 @@
       if (buffered) {
         vid.currentTime = target;
         log('currentTime set (fallback)', { target, buffered });
-      }
-    });
-
-
-    marker.style.cursor = 'pointer';
-    marker.dataset.time = String(seconds);
-    marker.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const vid = document.querySelector('video');
-      if (vid) {
-        vid.currentTime = seconds;
       }
     });
 
