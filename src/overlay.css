@@ -14,6 +14,7 @@
   );
   pointer-events: auto;
   z-index: 1000; /* プレイヤーUIより前面に */
+  outline: none; /* フォーカス時のブラウザ既定の枠線を非表示 */
 }
 .ytcm-tooltip {
   position: absolute;

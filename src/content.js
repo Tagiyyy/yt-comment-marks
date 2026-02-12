@@ -133,6 +133,7 @@
     // クリックでシーク
     marker.addEventListener('click', (e) => {
       e.stopPropagation();
+      marker.blur();
       // 元の <a> に合成クリックを送る（YouTube のハンドラを発火させる）
       if (linkEl) {
         try {
