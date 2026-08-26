@@ -3,12 +3,12 @@
   "default_locale": "en",
   "name": "__MSG_extName__",
   "description": "__MSG_extDesc__",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "host_permissions": ["https://www.youtube.com/*"],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["src/content.js"],
+      "js": ["src/logger.js", "src/content.js"],
       "css": ["src/overlay.css"],
       "run_at": "document_idle"
     }

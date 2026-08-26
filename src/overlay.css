@@ -6,6 +6,8 @@
   top: -300%;
   width: 10px;
   height: 400%;
+  /* left はタイムスタンプの位置そのもの。幅の半分だけ戻して中央を合わせる。 */
+  margin-left: -5px;
   /* バーは下側の25%に相当。 */
   background: linear-gradient(
     to bottom,
